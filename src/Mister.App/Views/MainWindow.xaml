@@ -3,7 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:views="clr-namespace:Mister.App.Views"
         Style="{StaticResource WorkbenchWindow}"
-        Title="Technika Tools — Pack Workbench"
+        Title="Technika Tool — Pack Workbench"
         Width="1440"
         Height="900"
         MinWidth="1080"
@@ -42,7 +42,7 @@
         <StackPanel MaxWidth="720" HorizontalAlignment="Left">
           <TextBlock Style="{StaticResource Eyebrow}"
                      Foreground="{StaticResource TextMutedBrush}"
-                     Text="Technika Tools" />
+                     Text="Technika Tool" />
           <TextBlock Style="{StaticResource DisplayTitle}"
                      Margin="0,2,0,0"
                      FontSize="28"

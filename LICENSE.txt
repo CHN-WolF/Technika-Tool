@@ -1,4 +1,4 @@
-Technika Tools source and binaries
+Technika Tool source and binaries
 Copyright (c) 2026 Ryuki
 
 All rights reserved. No permission is granted to redistribute modified or

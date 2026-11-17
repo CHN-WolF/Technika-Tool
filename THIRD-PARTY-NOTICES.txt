@@ -1,4 +1,4 @@
-Technika Tools third-party notices
+Technika Tool third-party notices
 
 This distribution includes:
 

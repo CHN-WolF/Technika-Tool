@@ -51,7 +51,7 @@ public sealed class MainWindowViewModel : ViewModelBase
     private ToolDiagnostic? lastDiagnostic;
     private readonly string playbackRoot = Path.Combine(
         Path.GetTempPath(),
-        "Mister",
+        "Technika Tool",
         "Playback",
         Guid.NewGuid().ToString("N"));
 

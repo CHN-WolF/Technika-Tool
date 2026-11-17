@@ -18,7 +18,7 @@ public sealed class AppContainerProfile : IDisposable
     public static AppContainerProfile Create(string name)
     {
         if (!OperatingSystem.IsWindows()) throw new PlatformNotSupportedException();
-        int hresult = NativeMethods.CreateAppContainerProfile(name, name, "Technika Tools disposable no-network capture profile", IntPtr.Zero, 0, out IntPtr sid);
+        int hresult = NativeMethods.CreateAppContainerProfile(name, name, "Technika Tool disposable no-network capture profile", IntPtr.Zero, 0, out IntPtr sid);
         ThrowIfFailed(hresult, "Unable to create zero-capability AppContainer profile.");
         return new AppContainerProfile(name, sid);
     }

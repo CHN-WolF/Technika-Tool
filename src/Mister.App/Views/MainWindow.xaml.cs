@@ -70,7 +70,7 @@ public partial class MainWindow : Window
 
     private async void OnUseCaptureBundle(object sender, RoutedEventArgs e)
     {
-        var picker = new OpenFileDialog { Filter = "Mister capture bundle (*.ttcapture)|*.ttcapture", Title = "Use an existing T2 capture bundle" };
+        var picker = new OpenFileDialog { Filter = "Technika Tool capture bundle (*.ttcapture)|*.ttcapture", Title = "Use an existing T2 capture bundle" };
         if (picker.ShowDialog(this) == true) await ViewModel.UseCaptureBundleAsync(picker.FileName);
     }
 

@@ -85,7 +85,7 @@ internal sealed unsafe class EmbeddedMediaSession : IDisposable
         thread = new Thread(PlaybackLoop)
         {
             IsBackground = true,
-            Name = "Mister media decoder"
+            Name = "Technika Tool media decoder"
         };
         thread.Start();
     }

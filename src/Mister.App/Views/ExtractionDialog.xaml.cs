@@ -116,7 +116,7 @@ public partial class ExtractionDialog : Window, INotifyPropertyChanged
                 OutputDirectory,
                 StringComparison.OrdinalIgnoreCase)
             ? "Nothing is written until you confirm."
-            : "The selected folder contains source PAKs, so output will use the Mister Extracted subfolder.";
+            : "The selected folder contains source PAKs, so output will use the Technika Tool Extracted subfolder.";
     }
 
     internal static string SafeOutputDirectory(
@@ -133,7 +133,7 @@ public partial class ExtractionDialog : Window, INotifyPropertyChanged
                 prefix,
                 StringComparison.OrdinalIgnoreCase));
         return containsSource
-            ? Path.Combine(selected, "Mister Extracted")
+            ? Path.Combine(selected, "Technika Tool Extracted")
             : selected;
     }
 
