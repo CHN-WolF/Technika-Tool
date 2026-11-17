@@ -184,7 +184,8 @@ public sealed partial class SafeArchivePathRegistry
 
     public ToolResult<ResolvedArchivePath> Resolve(
         string archivePath,
-        int ordinal)
+        int ordinal,
+        bool replaceExisting = false)
     {
         if (ordinal < 0)
         {
@@ -210,6 +211,11 @@ public sealed partial class SafeArchivePathRegistry
             }
 
             if (_claimed.TryAdd(relativePath, relativePath))
+            {
+                return Success(safe.Value!, relativePath, null);
+            }
+
+            if (replaceExisting)
             {
                 return Success(safe.Value!, relativePath, null);
             }

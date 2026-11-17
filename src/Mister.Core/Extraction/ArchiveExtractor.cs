@@ -86,6 +86,8 @@ public sealed class ArchiveExtractor
         }
 
         string outputRoot = validated.Value!.OutputRoot;
+        bool buildMergedView = validated.Value.BuildMergedView;
+        IReadOnlySet<string>? included = NormalizeIncluded(options.IncludedDecodedPaths);
         string manifestPath = Path.Combine(outputRoot, ManifestFileName);
         string failuresPath = Path.Combine(outputRoot, FailuresFileName);
         string summaryPath = Path.Combine(outputRoot, SummaryFileName);
@@ -95,7 +97,8 @@ public sealed class ArchiveExtractor
         int extractedEntries = 0;
         int failedEntries = 0;
         long decodedBytes = 0;
-        long totalDecodedBytes = SumDeclaredBytes(archives);
+        IReadOnlyList<ArchiveIndex> orderedArchives = OrderArchives(archives);
+        long totalDecodedBytes = SumDeclaredBytes(orderedArchives, included);
         bool cancelled = cancellationToken.IsCancellationRequested;
 
         await using IncrementalReports reports =
@@ -106,12 +109,17 @@ public sealed class ArchiveExtractor
                 validated.Value.InputPaths,
                 _reportObserver).ConfigureAwait(false);
 
-        var archivePathRegistry = new SafeArchivePathRegistry(
-            Path.Combine(outputRoot, "by_pack"));
+        SafeArchivePathRegistry? mergedPathRegistry = buildMergedView
+            ? new SafeArchivePathRegistry(outputRoot)
+            : null;
+        SafeArchivePathRegistry? archivePathRegistry = buildMergedView
+            ? null
+            : new SafeArchivePathRegistry(
+                Path.Combine(outputRoot, "by_pack"));
         try
         {
             for (int archiveIndex = 0;
-                 archiveIndex < archives.Count && !cancelled;
+                 archiveIndex < orderedArchives.Count && !cancelled;
                  archiveIndex++)
             {
                 if (cancellationToken.IsCancellationRequested)
@@ -120,13 +128,19 @@ public sealed class ArchiveExtractor
                     break;
                 }
 
-                ArchiveIndex archive = archives[archiveIndex];
+                ArchiveIndex archive = orderedArchives[archiveIndex];
+                int includedEntryCount = CountIncluded(archive, included);
+                if (included is not null && includedEntryCount == 0)
+                {
+                    continue;
+                }
+
                 string archiveName = Path.GetFileName(archive.ArchivePath);
                 progress?.Report(
                     new ExtractionProgress(
                         archiveName,
                         EntryOrdinal: -1,
-                        archive.Entries.Count,
+                        includedEntryCount,
                         decodedBytes,
                         totalDecodedBytes,
                         failedEntries));
@@ -183,31 +197,54 @@ public sealed class ArchiveExtractor
                     continue;
                 }
 
-                ToolResult<ResolvedArchivePath> archiveDirectoryResult =
-                    archivePathRegistry.Resolve(archiveName, archiveIndex);
-                if (!archiveDirectoryResult.IsSuccess)
+                SafeArchivePathRegistry entryPathRegistry;
+                ResolvedArchivePath? archiveDirectory = null;
+                if (buildMergedView)
                 {
-                    ToolDiagnostic diagnostic =
-                        archiveDirectoryResult.Error!;
-                    cancelled = await RecordArchiveFailuresAsync(
-                        archive,
-                        archiveName,
-                        sourceSha256,
-                        diagnostic).ConfigureAwait(false);
-                    if (cancelled)
+                    entryPathRegistry = mergedPathRegistry!;
+                }
+                else
+                {
+                    string archiveFolderName =
+                        Path.GetFileNameWithoutExtension(archiveName);
+                    if (string.IsNullOrWhiteSpace(archiveFolderName))
                     {
-                        break;
+                        archiveFolderName = archiveName;
                     }
 
-                    continue;
+                    ToolResult<ResolvedArchivePath> archiveDirectoryResult =
+                        archivePathRegistry!.Resolve(
+                            archiveFolderName,
+                            archiveIndex);
+                    if (!archiveDirectoryResult.IsSuccess)
+                    {
+                        ToolDiagnostic diagnostic =
+                            archiveDirectoryResult.Error!;
+                        cancelled = await RecordArchiveFailuresAsync(
+                            archive,
+                            archiveName,
+                            sourceSha256,
+                            diagnostic).ConfigureAwait(false);
+                        if (cancelled)
+                        {
+                            break;
+                        }
+
+                        continue;
+                    }
+
+                    archiveDirectory = archiveDirectoryResult.Value!;
+                    entryPathRegistry = new SafeArchivePathRegistry(
+                        archiveDirectory.FullPath);
                 }
 
-                ResolvedArchivePath archiveDirectory =
-                    archiveDirectoryResult.Value!;
-                var entryPathRegistry = new SafeArchivePathRegistry(
-                    archiveDirectory.FullPath);
                 foreach (ArchiveEntry entry in archive.Entries)
                 {
+                    if (!IsIncluded(included, entry))
+                    {
+                        continue;
+                    }
+
                     if (cancellationToken.IsCancellationRequested)
                     {
                         cancelled = true;
@@ -217,7 +254,8 @@ public sealed class ArchiveExtractor
                     ToolResult<ResolvedArchivePath> outputResult =
                         entryPathRegistry.Resolve(
                             entry.DecodedPath,
-                            entry.Ordinal);
+                            entry.Ordinal,
+                            replaceExisting: buildMergedView);
                     if (!outputResult.IsSuccess)
                     {
                         failedEntries++;
@@ -245,10 +283,12 @@ public sealed class ArchiveExtractor
                     }
 
                     ResolvedArchivePath resolved = outputResult.Value!;
-                    string relativeOutputPath = JoinWindowsPath(
-                        "by_pack",
-                        archiveDirectory.RelativePath,
-                        resolved.RelativePath);
+                    string relativeOutputPath = buildMergedView
+                        ? resolved.RelativePath
+                        : JoinWindowsPath(
+                            "by_pack",
+                            archiveDirectory!.RelativePath,
+                            resolved.RelativePath);
                     try
                     {
                         ToolResult<string> safeDestination =
@@ -265,6 +305,7 @@ public sealed class ArchiveExtractor
                         await using AtomicOutputFile output =
                             await AtomicOutputFile.CreateAsync(
                                 safeDestination.Value!,
+                                overwriteExisting: buildMergedView,
                                 cancellationToken).ConfigureAwait(false);
                         using var observer =
                             new ObservingWriteStream(output.Stream);
@@ -395,7 +436,7 @@ public sealed class ArchiveExtractor
                             new ExtractionProgress(
                                 archiveName,
                                 entry.Ordinal,
-                                archive.Entries.Count,
+                                includedEntryCount,
                                 decodedBytes,
                                 totalDecodedBytes,
                                 failedEntries));
@@ -478,6 +519,11 @@ public sealed class ArchiveExtractor
         {
             foreach (ArchiveEntry entry in archive.Entries)
             {
+                if (!IsIncluded(included, entry))
+                {
+                    continue;
+                }
+
                 if (cancellationToken.IsCancellationRequested)
                 {
                     return true;
@@ -500,7 +546,7 @@ public sealed class ArchiveExtractor
                     new ExtractionProgress(
                         archiveName,
                         entry.Ordinal,
-                        archive.Entries.Count,
+                        CountIncluded(archive, included),
                         decodedBytes,
                         totalDecodedBytes,
                         failedEntries));
@@ -682,18 +728,84 @@ public sealed class ArchiveExtractor
             or ArgumentException
             or NotSupportedException;
 
+    private static IReadOnlyList<ArchiveIndex> OrderArchives(
+        IReadOnlyList<ArchiveIndex> archives) =>
+        archives
+            .Select((archive, selectionOrdinal) =>
+                (Archive: archive, SelectionOrdinal: selectionOrdinal))
+            .OrderBy(
+                item => item,
+                Comparer<(ArchiveIndex Archive, int SelectionOrdinal)>.Create(
+                    static (left, right) =>
+                    {
+                        int comparison = PackFamilyOrder.Compare(
+                            Path.GetFileName(left.Archive.ArchivePath),
+                            left.SelectionOrdinal,
+                            Path.GetFileName(right.Archive.ArchivePath),
+                            right.SelectionOrdinal);
+                        return comparison != 0
+                            ? comparison
+                            : StringComparer.OrdinalIgnoreCase.Compare(
+                                left.Archive.ArchivePath,
+                                right.Archive.ArchivePath);
+                    }))
+            .Select(item => item.Archive)
+            .ToArray();
+
     private static long SumDeclaredBytes(
-        IReadOnlyList<ArchiveIndex> archives)
+        IReadOnlyList<ArchiveIndex> archives,
+        IReadOnlySet<string>? included)
     {
         long total = 0;
         foreach (ArchiveEntry entry in archives.SelectMany(
                      archive => archive.Entries))
         {
+            if (!IsIncluded(included, entry))
+            {
+                continue;
+            }
+
             total = SaturatingAdd(total, Math.Max(0, entry.DecodedSize));
         }
 
         return total;
     }
+
+    private static IReadOnlySet<string>? NormalizeIncluded(
+        IReadOnlySet<string>? paths)
+    {
+        if (paths is null)
+        {
+            return null;
+        }
+
+        var set = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (string path in paths)
+        {
+            if (string.IsNullOrWhiteSpace(path))
+            {
+                continue;
+            }
+
+            set.Add(path);
+            set.Add(path.Replace('\\', '/'));
+            set.Add(path.Replace('/', '\\'));
+        }
+
+        return set;
+    }
+
+    private static bool IsIncluded(
+        IReadOnlySet<string>? included,
+        ArchiveEntry entry) =>
+        included is null || included.Contains(entry.DecodedPath);
+
+    private static int CountIncluded(
+        ArchiveIndex archive,
+        IReadOnlySet<string>? included) =>
+        included is null
+            ? archive.Entries.Count
+            : archive.Entries.Count(entry => IsIncluded(included, entry));
 
     private static long SaturatingAdd(long left, long right) =>
         right > 0 && left > long.MaxValue - right

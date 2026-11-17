@@ -29,6 +29,7 @@ public sealed class MainWindowViewModel : ViewModelBase
     private CancellationTokenSource? previewSelection;
     private ArchiveListItemViewModel? selectedArchive;
     private LogicalPackViewModel? selectedPack;
+    private bool mergePackLayers;
     private bool isPreviewLoading;
     private string safetyStatus = "Offline \u2022 Read-only";
     private string clientPath = "No client selected";
@@ -136,6 +137,20 @@ public sealed class MainWindowViewModel : ViewModelBase
             }
         }
     }
+
+    public bool MergePackLayers
+    {
+        get => mergePackLayers;
+        set
+        {
+            if (!SetProperty(ref mergePackLayers, value)) return;
+            OnPropertyChanged(nameof(PackPickerLabel));
+            RebuildPackGroups();
+        }
+    }
+
+    public string PackPickerLabel =>
+        mergePackLayers ? "Logical pack" : "Archive";
 
     public string SafetyStatus
     {
@@ -278,13 +293,26 @@ public sealed class MainWindowViewModel : ViewModelBase
     }
 
     public bool HasSelectedFile => Inspector.SelectedEntry is not null;
-    public string SelectedFileName => Inspector.SelectedEntry?.FileName ?? "Choose a file";
+    public string SelectedFileName => Inspector.SelectedEntry?.FileName
+        ?? Inspector.SelectedFolder?.SongName
+        ?? "Choose a file";
     public string SelectedFilePath => Inspector.SelectedEntry?.DecodedPath
+        ?? Inspector.SelectedFolder?.FolderPath
         ?? "Select a decoded file to preview it automatically.";
-    public string SelectedFileSourceArchive => Inspector.SelectedEntry?.SourceArchiveName ?? "—";
-    public string SelectedFileSummary => Inspector.SelectedEntry is null
-        ? "No file selected"
-        : $"{Inspector.SelectedEntry.Extension.TrimStart('.').ToUpperInvariant()} · {Inspector.SelectedEntry.SizeLabel}";
+    public string SelectedFileSourceArchive => Inspector.SelectedEntry?.SourceArchiveName
+        ?? Inspector.SelectedFolder?.SourceLabel
+        ?? "—";
+    public string SelectedFileSummary => Inspector.SelectedEntry is { } entry
+        ? $"{entry.Extension.TrimStart('.').ToUpperInvariant()} · {entry.SizeLabel}"
+        : Inspector.SelectedFolder is { } folder
+            ? $"{folder.Files.Count:N0} files · {folder.SizeLabel}"
+            : "No file selected";
+    public string PreviewEmptyTitle => Inspector.SelectedFolder is { } folder
+        ? folder.SongName
+        : "Choose a file to preview";
+    public string PreviewEmptyMessage => Inspector.SelectedFolder is { } folder
+        ? "Open this song to preview a file, or extract the whole folder."
+        : "Preview images, text, audio, video, VCE animation, and unknown binaries safely here.";
     public bool HasPreviewImage => PreviewImage is not null;
     public bool HasPreviewText => !string.IsNullOrWhiteSpace(Preview?.Text);
     public bool HasPreviewMetadata =>
@@ -424,6 +452,7 @@ public sealed class MainWindowViewModel : ViewModelBase
             if (seen.Add(path)) Archives.Add(new ArchiveListItemViewModel(path));
         }
 
+        RemovePakKeyStubs();
         RebuildPackGroups();
         PackStatus = Archives.Count == 0
             ? PackStatus
@@ -606,6 +635,7 @@ public sealed class MainWindowViewModel : ViewModelBase
             archive.ApplyDetection(item.Detection);
         }
 
+        DisambiguatePackLabels();
         RebuildPackWorkspace(SelectedPack);
 
         PakKeyStatus = loadedEvidence.Family == GameFamily.Technika2
@@ -969,8 +999,14 @@ public sealed class MainWindowViewModel : ViewModelBase
             await PrepareT3RecoveryCoreAsync(cancellationToken);
         }
 
+        ArchiveListItemViewModel[][] series = Archives
+            .GroupBy(
+                static archive => archive.SeriesName,
+                StringComparer.OrdinalIgnoreCase)
+            .Select(static group => group.ToArray())
+            .ToArray();
         if (evidence?.Family != GameFamily.Technika3
-            || PackGroups.Count == 0)
+            || series.Length == 0)
         {
             return;
         }
@@ -979,14 +1015,15 @@ public sealed class MainWindowViewModel : ViewModelBase
         int recovered = 0;
         int failed = 0;
         ToolDiagnostic? firstFailure = null;
-        foreach (LogicalPackViewModel pack in PackGroups)
+        foreach (ArchiveListItemViewModel[] members in series)
         {
             cancellationToken.ThrowIfCancellationRequested();
+            string keyName = T3PakKeyResolver.BaseKeyName(members[0].Name);
             PakKeyStatus =
-                $"Recovering {pack.Name} · {recovered + failed + 1}/{PackGroups.Count}";
+                $"Recovering {keyName} · {recovered + failed + 1}/{series.Length}";
             ToolResult<PakKeyCoverage> recovery =
                 await workflow.RecoverPakKeyAsync(
-                    pack.Members
+                    members
                         .Select(static archive => archive.Path)
                         .ToArray(),
                     evidence,
@@ -1023,7 +1060,7 @@ public sealed class MainWindowViewModel : ViewModelBase
 
         LastDiagnostic = firstFailure;
         PakKeyStatus =
-            $"Client_D recovery exported {recovered}/{PackGroups.Count} pakkeys"
+            $"Client_D recovery exported {recovered}/{series.Length} pakkeys"
             + (failed == 0 ? "." : $"; {failed} failed.");
         EvidenceStatus = recovered > 0
             ? $"Recovered pakkeys are available in {outputRoot}"
@@ -1035,9 +1072,11 @@ public sealed class MainWindowViewModel : ViewModelBase
         string outputDirectory,
         bool buildMergedView,
         IReadOnlyCollection<string>? selectedPackSeries = null,
+        IReadOnlyCollection<string>? includedDecodedPaths = null,
         CancellationToken cancellationToken = default)
     {
         if (!CanExtract || evidence is null) return;
+        if (includedDecodedPaths is { Count: 0 }) return;
         HashSet<string>? selected = selectedPackSeries is null
             ? null
             : new HashSet<string>(
@@ -1046,7 +1085,7 @@ public sealed class MainWindowViewModel : ViewModelBase
         ArchiveIndex[] indexes = PackGroups
             .Where(pack =>
                 pack.IsValid
-                && (selected is null || selected.Contains(pack.SeriesName)))
+                && (selected is null || selected.Contains(pack.Key)))
             .SelectMany(static pack => pack.Members)
             .Where(static archive => archive.IsValid)
             .Select(static archive => archive.Index!)
@@ -1081,7 +1120,8 @@ public sealed class MainWindowViewModel : ViewModelBase
                     outputDirectory,
                     buildMergedView,
                     progress,
-                    operationToken.Token);
+                    operationToken.Token,
+                    includedDecodedPaths);
                 LastDiagnostic = summary.Diagnostics.FirstOrDefault();
                 if (LastDiagnostic is not null) SurfaceDiagnostic(LastDiagnostic);
                 else EvidenceStatus = summary.Status == ExtractionStatus.Cancelled
@@ -1163,26 +1203,101 @@ public sealed class MainWindowViewModel : ViewModelBase
 
     private void RebuildPackGroups()
     {
+        string? previousKey = SelectedPack?.Key;
         string? previousSeries = SelectedPack?.SeriesName;
         PackGroups.Clear();
-        foreach (IGrouping<string, ArchiveListItemViewModel> group in Archives
-                     .GroupBy(
-                         static archive => archive.SeriesName,
-                         StringComparer.OrdinalIgnoreCase)
-                     .OrderBy(
-                         static group => group.Key,
-                         StringComparer.OrdinalIgnoreCase))
+        if (mergePackLayers)
         {
-            PackGroups.Add(new LogicalPackViewModel(group.Key, group));
+            foreach (IGrouping<string, ArchiveListItemViewModel> group in Archives
+                         .GroupBy(
+                             static archive => archive.SeriesName,
+                             StringComparer.OrdinalIgnoreCase)
+                         .OrderBy(
+                             static group => group.Key,
+                             StringComparer.OrdinalIgnoreCase))
+            {
+                PackGroups.Add(new LogicalPackViewModel(group.Key, group));
+            }
+        }
+        else
+        {
+            foreach (ArchiveListItemViewModel archive in Archives
+                         .OrderBy(
+                             static archive => archive.Name,
+                             Comparer<string>.Create(PackFamilyOrder.Compare))
+                         .ThenBy(static archive => archive.Name, StringComparer.Ordinal))
+            {
+                PackGroups.Add(new LogicalPackViewModel(
+                    archive.SeriesName,
+                    [archive],
+                    archive.Name));
+            }
         }
 
+        DisambiguatePackLabels();
         SelectedPack = PackGroups.FirstOrDefault(pack =>
+                           string.Equals(
+                               pack.Key,
+                               previousKey,
+                               StringComparison.OrdinalIgnoreCase))
+                       ?? PackGroups.FirstOrDefault(pack =>
+                           string.Equals(
+                               pack.Name,
+                               previousSeries + ".pak",
+                               StringComparison.OrdinalIgnoreCase))
+                       ?? PackGroups.FirstOrDefault(pack =>
                            string.Equals(
                                pack.SeriesName,
                                previousSeries,
                                StringComparison.OrdinalIgnoreCase))
                        ?? PackGroups.FirstOrDefault();
         OnPropertyChanged(nameof(PackGroups));
+    }
+
+    private void RemovePakKeyStubs()
+    {
+        IReadOnlyList<string> kept = InputDiscoveryService.WithoutPakKeyStubs(
+            Archives.Select(static archive => archive.Path));
+        if (kept.Count == Archives.Count) return;
+        var keep = new HashSet<string>(kept, StringComparer.OrdinalIgnoreCase);
+        for (int index = Archives.Count - 1; index >= 0; index--)
+        {
+            if (!keep.Contains(Archives[index].Path)) Archives.RemoveAt(index);
+        }
+    }
+
+    private void DisambiguatePackLabels()
+    {
+        var counts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        foreach (LogicalPackViewModel pack in PackGroups)
+        {
+            counts.TryGetValue(pack.Name, out int count);
+            counts[pack.Name] = count + 1;
+        }
+
+        foreach (LogicalPackViewModel pack in PackGroups)
+        {
+            if (!counts.TryGetValue(pack.Name, out int count) || count < 2)
+            {
+                pack.SetListLabel(pack.Name);
+                continue;
+            }
+
+            string folder = pack.Members.Count == 1
+                ? Path.GetFileName(
+                    Path.GetDirectoryName(pack.Members[0].Path) ?? string.Empty)
+                : string.Empty;
+            string label = string.IsNullOrEmpty(folder)
+                ? pack.Name
+                : Path.Combine(folder, pack.Name);
+            if (pack.Members.All(static member => member.Index is not null)
+                && pack.FileCount == 0)
+            {
+                label += " · empty";
+            }
+
+            pack.SetListLabel(label);
+        }
     }
 
     private void RebuildPackWorkspace(LogicalPackViewModel? pack)
@@ -1200,6 +1315,7 @@ public sealed class MainWindowViewModel : ViewModelBase
         Inspector = new ArchiveInspectorViewModel(entries);
         Inspector.PropertyChanged += OnInspectorPropertyChanged;
         OnPropertyChanged(nameof(Inspector));
+        NotifySelectedFileChanged();
         if (entries.Count == 0) return;
         foreach (IGrouping<string, ArchiveEntrySource> group in entries
                      .GroupBy(static source => FirstSegment(source.Entry.DecodedPath)))
@@ -1215,6 +1331,12 @@ public sealed class MainWindowViewModel : ViewModelBase
         object? sender,
         System.ComponentModel.PropertyChangedEventArgs args)
     {
+        if (args.PropertyName == nameof(ArchiveInspectorViewModel.SelectedRow))
+        {
+            NotifySelectedFileChanged();
+            return;
+        }
+
         if (args.PropertyName != nameof(ArchiveInspectorViewModel.SelectedEntry)) return;
         PreviewCommand.RaiseCanExecuteChanged();
         Preview = null;
@@ -1239,6 +1361,8 @@ public sealed class MainWindowViewModel : ViewModelBase
         OnPropertyChanged(nameof(SelectedFilePath));
         OnPropertyChanged(nameof(SelectedFileSourceArchive));
         OnPropertyChanged(nameof(SelectedFileSummary));
+        OnPropertyChanged(nameof(PreviewEmptyTitle));
+        OnPropertyChanged(nameof(PreviewEmptyMessage));
         OnPropertyChanged(nameof(ShowPreviewEmpty));
     }
 
@@ -1361,7 +1485,7 @@ public sealed class ArchiveListItemViewModel(string path) : ViewModelBase
         get
         {
             string stem = System.IO.Path.GetFileNameWithoutExtension(Path);
-            return HasNumberedPatchSuffix(stem)
+            return T3PakKeyResolver.HasNumberedPatchSuffix(stem)
                 ? stem[..^2]
                 : stem;
         }
@@ -1372,7 +1496,7 @@ public sealed class ArchiveListItemViewModel(string path) : ViewModelBase
         get
         {
             string stem = System.IO.Path.GetFileNameWithoutExtension(Path);
-            return HasNumberedPatchSuffix(stem)
+            return T3PakKeyResolver.HasNumberedPatchSuffix(stem)
                 ? $"UPDATE {stem[^2..]}"
                 : "BASE";
         }
@@ -1411,21 +1535,24 @@ public sealed class ArchiveListItemViewModel(string path) : ViewModelBase
         OnPropertyChanged(nameof(KeyCoverage));
     }
 
-    private static bool HasNumberedPatchSuffix(string stem) =>
-        stem.Length > 2
-        && stem[^2] == '0'
-        && char.IsAsciiDigit(stem[^1]);
 }
 
 public sealed class LogicalPackViewModel : ViewModelBase
 {
     public LogicalPackViewModel(
         string seriesName,
-        IEnumerable<ArchiveListItemViewModel> members)
+        IEnumerable<ArchiveListItemViewModel> members,
+        string? displayName = null)
     {
         SeriesName = seriesName;
+        bool named = !string.IsNullOrWhiteSpace(displayName);
+        Name = named ? displayName! : $"{seriesName}.pak";
+        Key = named ? displayName! : seriesName;
+        ListLabel = Name;
         Members = members
-            .OrderBy(static member => member.Name, StringComparer.OrdinalIgnoreCase)
+            .OrderBy(
+                static member => member.Name,
+                Comparer<string>.Create(PackFamilyOrder.Compare))
             .ThenBy(static member => member.Name, StringComparer.Ordinal)
             .ToArray();
         foreach (ArchiveListItemViewModel member in Members)
@@ -1435,8 +1562,20 @@ public sealed class LogicalPackViewModel : ViewModelBase
     }
 
     public string SeriesName { get; }
-    public string Name => $"{SeriesName}.pak";
-    public override string ToString() => Name;
+    public string Name { get; }
+    public string Key { get; }
+    public string ListLabel { get; private set; }
+    public string SourcePathLabel =>
+        string.Join(Environment.NewLine, Members.Select(static member => member.Path));
+    public override string ToString() => ListLabel;
+
+    public void SetListLabel(string label)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(label);
+        if (string.Equals(ListLabel, label, StringComparison.Ordinal)) return;
+        ListLabel = label;
+        OnPropertyChanged(nameof(ListLabel));
+    }
     public IReadOnlyList<ArchiveListItemViewModel> Members { get; }
     public int LayerCount => Members.Count;
     public int UpdateCount => Math.Max(0, LayerCount - 1);

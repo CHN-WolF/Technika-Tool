@@ -8,6 +8,11 @@ public sealed record ExtractionOptions(
 {
     public IReadOnlyList<string> InputPaths { get; init; } = [];
 
+    /// <summary>
+    /// When set, only these decoded paths are written. Null extracts every entry.
+    /// </summary>
+    public IReadOnlySet<string>? IncludedDecodedPaths { get; init; }
+
     public static ToolResult<ExtractionOptions> Validate(
         string outputRoot,
         bool buildMergedView,

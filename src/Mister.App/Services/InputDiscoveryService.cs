@@ -19,6 +19,10 @@ public enum DroppedInputKind
 
 public sealed class InputDiscoveryService : IInputDiscoveryService
 {
+    // Technika keeps a 128-byte pakkey next to the client, using the archive's file name.
+    // That file cannot hold a T2 or T3 record, so it is not a second pack.
+    internal const long PakKeyStubLength = 128;
+
     private readonly Func<string, FileAttributes> getAttributes;
 
     public InputDiscoveryService(Func<string, FileAttributes>? getAttributes = null)
@@ -90,6 +94,49 @@ public sealed class InputDiscoveryService : IInputDiscoveryService
 
     public static bool DirectoryContainsPaks(string directory) =>
         new InputDiscoveryService().DiscoverPaksInDirectory(directory).Any();
+
+    public static IReadOnlyList<string> WithoutPakKeyStubs(IEnumerable<string> paths)
+    {
+        ArgumentNullException.ThrowIfNull(paths);
+        string[] all = paths
+            .Where(static path => !string.IsNullOrWhiteSpace(path))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        var largerNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (string path in all)
+        {
+            if (TryGetLength(path, out long length) && length != PakKeyStubLength)
+            {
+                largerNames.Add(Path.GetFileName(path));
+            }
+        }
+
+        return all
+            .Where(path => !IsShadowedPakKeyStub(path, largerNames))
+            .ToArray();
+    }
+
+    private static bool IsShadowedPakKeyStub(
+        string path,
+        HashSet<string> largerNames) =>
+        TryGetLength(path, out long length)
+        && length == PakKeyStubLength
+        && largerNames.Contains(Path.GetFileName(path));
+
+    private static bool TryGetLength(string path, out long length)
+    {
+        try
+        {
+            length = new FileInfo(path).Length;
+            return true;
+        }
+        catch (Exception exception) when (
+            exception is IOException or UnauthorizedAccessException)
+        {
+            length = 0;
+            return false;
+        }
+    }
 
     private bool IsSafeDirectory(string? directory)
     {

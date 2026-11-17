@@ -33,14 +33,24 @@
         <TextBlock Style="{StaticResource DisplayTitle}"
                    Margin="0,4,0,0"
                    FontSize="28"
-                   Text="Choose packs to extract" />
+                   Text="{Binding HeadingText}" />
         <TextBlock Margin="0,7,0,0"
                    Foreground="{StaticResource TextSecondaryBrush}"
                    TextWrapping="Wrap"
-                   Text="Select one or more logical packs. Every base and numbered update layer belonging to each selection is preserved and verified." />
+                   Text="{Binding DescriptionText}" />
       </StackPanel>
 
       <Grid Grid.Row="2">
+        <Grid.Style>
+          <Style TargetType="{x:Type Grid}">
+            <Setter Property="Visibility" Value="Visible" />
+            <Style.Triggers>
+              <DataTrigger Binding="{Binding ShowPackList}" Value="False">
+                <Setter Property="Visibility" Value="Collapsed" />
+              </DataTrigger>
+            </Style.Triggers>
+          </Style>
+        </Grid.Style>
         <Grid.ColumnDefinitions>
           <ColumnDefinition Width="*" />
           <ColumnDefinition Width="Auto" />
@@ -70,9 +80,36 @@
               BorderThickness="1"
               CornerRadius="10"
               Padding="8">
+        <Grid>
+        <TextBlock Margin="8"
+                   TextWrapping="Wrap"
+                   VerticalAlignment="Top"
+                   Foreground="{StaticResource TextSecondaryBrush}"
+                   Text="Only these song files are verified and written. Other files in the pack stay in the archive.">
+          <TextBlock.Style>
+            <Style TargetType="{x:Type TextBlock}">
+              <Setter Property="Visibility" Value="Collapsed" />
+              <Style.Triggers>
+                <DataTrigger Binding="{Binding ShowPackList}" Value="False">
+                  <Setter Property="Visibility" Value="Visible" />
+                </DataTrigger>
+              </Style.Triggers>
+            </Style>
+          </TextBlock.Style>
+        </TextBlock>
         <ListBox x:Name="PackList"
                  ItemsSource="{Binding Packs}"
                  AutomationProperties.Name="Packs selected for extraction">
+          <ListBox.Style>
+            <Style TargetType="{x:Type ListBox}" BasedOn="{StaticResource {x:Type ListBox}}">
+              <Setter Property="Visibility" Value="Visible" />
+              <Style.Triggers>
+                <DataTrigger Binding="{Binding ShowPackList}" Value="False">
+                  <Setter Property="Visibility" Value="Collapsed" />
+                </DataTrigger>
+              </Style.Triggers>
+            </Style>
+          </ListBox.Style>
           <ListBox.ItemTemplate>
             <DataTemplate>
               <CheckBox Padding="5"
@@ -101,6 +138,7 @@
             </DataTemplate>
           </ListBox.ItemTemplate>
         </ListBox>
+        </Grid>
       </Border>
 
       <StackPanel Grid.Row="6">
@@ -129,7 +167,7 @@
               BorderThickness="1"
               CornerRadius="10">
         <CheckBox IsChecked="{Binding BuildMergedView}"
-                  Content="Build one merged effective view (recommended)" />
+                  Content="Write one effective tree (base → 00/01/… overlays replace; no .pak folders)" />
       </Border>
 
       <Grid Grid.Row="10">

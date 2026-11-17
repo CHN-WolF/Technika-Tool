@@ -43,7 +43,7 @@ public static class Cp949PathDecoder
         {
             return InvalidPath(
                 allowPatternRoot
-                    ? "The decoded path must start with the resource or pattern component."
+                    ? "The decoded path must start with the resource, pattern, or movie component."
                     : "The decoded path must start with the resource component.");
         }
 
@@ -59,11 +59,38 @@ public static class Cp949PathDecoder
                     "resource",
                     StringComparison.OrdinalIgnoreCase)
                 || allowPatternRoot
-                && string.Equals(
-                    components[0],
-                    "pattern",
-                    StringComparison.OrdinalIgnoreCase))
+                && (string.Equals(
+                        components[0],
+                        "pattern",
+                        StringComparison.OrdinalIgnoreCase)
+                    || IsMovieRoot(components[0])))
             && components.All(static component => component.Length > 0);
+    }
+
+    // Technika 3 movie archives store BIK entries under roots like movie1\, movie20\.
+    private static bool IsMovieRoot(string component)
+    {
+        if (component.Length < 6
+            || !component.StartsWith("movie", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        ReadOnlySpan<char> suffix = component.AsSpan(5);
+        if (suffix.IsEmpty)
+        {
+            return false;
+        }
+
+        foreach (char character in suffix)
+        {
+            if (!char.IsAsciiDigit(character))
+            {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     private static ToolResult<string> InvalidPath(string message) =>

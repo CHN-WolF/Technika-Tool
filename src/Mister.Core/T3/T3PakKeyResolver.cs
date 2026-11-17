@@ -10,14 +10,20 @@ public static class T3PakKeyResolver
         string fileName = Path.GetFileName(archiveName);
         string extension = Path.GetExtension(fileName);
         string stem = Path.GetFileNameWithoutExtension(fileName);
-        int suffixStart = stem.Length;
-        while (suffixStart > 0 && char.IsAsciiDigit(stem[suffixStart - 1]))
+        // Only collapse zero-padded overlays (Title00.pak → Title.pak).
+        // Volume archives such as movie1.pak / movie20.pak keep distinct keys.
+        if (HasNumberedPatchSuffix(stem))
         {
-            suffixStart--;
+            stem = stem[..^2];
         }
 
-        return stem[..suffixStart] + extension;
+        return stem + extension;
     }
+
+    public static bool HasNumberedPatchSuffix(string stem) =>
+        stem.Length > 2
+        && stem[^2] == '0'
+        && char.IsAsciiDigit(stem[^1]);
 
     public static ToolResult<byte[]> Resolve(
         string archiveName,

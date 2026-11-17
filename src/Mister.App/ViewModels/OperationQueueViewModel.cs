@@ -19,9 +19,16 @@ public sealed class OperationQueueViewModel : ViewModelBase
         get => state;
         set
         {
-            if (SetProperty(ref state, value))
+            if (!SetProperty(ref state, value))
             {
-                OnPropertyChanged(nameof(IsRunning));
+                return;
+            }
+
+            OnPropertyChanged(nameof(IsRunning));
+            OnPropertyChanged(nameof(StatusLine));
+            if (value is OperationState.Idle)
+            {
+                ClearProgress();
             }
         }
     }
@@ -36,6 +43,22 @@ public sealed class OperationQueueViewModel : ViewModelBase
     public TimeSpan Elapsed { get => elapsed; private set => SetProperty(ref elapsed, value); }
     public bool IsRunning => State is OperationState.Running or OperationState.Cancelling;
 
+    public string StatusLine
+    {
+        get
+        {
+            if (!IsRunning)
+            {
+                return "No operation running";
+            }
+
+            string entryLabel = EntryOrdinal < 0
+                ? "starting"
+                : $"{EntryOrdinal + 1}/{Math.Max(EntryCount, 0)}";
+            return $"{ArchiveName} · entry {entryLabel} · bytes {CompletedDecodedBytes}/{TotalDecodedBytes} · failures {FailureCount} · {Elapsed}";
+        }
+    }
+
     public void Apply(
         Mister.Core.Extraction.ExtractionProgress progress,
         string currentEntryPath,
@@ -49,5 +72,19 @@ public sealed class OperationQueueViewModel : ViewModelBase
         TotalDecodedBytes = progress.TotalDecodedBytes;
         FailureCount = progress.FailureCount;
         Elapsed = operationElapsed;
+        OnPropertyChanged(nameof(StatusLine));
+    }
+
+    private void ClearProgress()
+    {
+        ArchiveName = "No operation running";
+        EntryOrdinal = -1;
+        EntryPath = "—";
+        EntryCount = 0;
+        CompletedDecodedBytes = 0;
+        TotalDecodedBytes = 0;
+        FailureCount = 0;
+        Elapsed = TimeSpan.Zero;
+        OnPropertyChanged(nameof(StatusLine));
     }
 }

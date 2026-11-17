@@ -9,14 +9,19 @@ namespace Mister.App.Views;
 
 public partial class ExtractionDialog : Window, INotifyPropertyChanged
 {
+    private readonly string? scopeDescription;
     private string outputDirectory = string.Empty;
     private string outputHint = "Nothing is written until you confirm.";
     private bool buildMergedView = true;
 
     public ExtractionDialog(
         IEnumerable<LogicalPackViewModel> packs,
-        LogicalPackViewModel? selectedPack)
+        LogicalPackViewModel? selectedPack,
+        string? scopeDescription = null)
     {
+        this.scopeDescription = string.IsNullOrWhiteSpace(scopeDescription)
+            ? null
+            : scopeDescription.Trim();
         Packs = new ObservableCollection<ExtractionPackOption>(
             packs
                 .Where(static pack => pack.IsValid)
@@ -31,8 +36,18 @@ public partial class ExtractionDialog : Window, INotifyPropertyChanged
         }
 
         InitializeComponent();
+        if (this.scopeDescription is not null) Title = "Extract song files";
         DataContext = this;
     }
+
+    public bool ShowPackList => scopeDescription is null;
+
+    public string HeadingText => scopeDescription is null
+        ? "Choose packs to extract"
+        : "Extract song files";
+
+    public string DescriptionText => scopeDescription
+        ?? "Select one or more packs. With the merged view enabled, packs write Resource/pattern/movie paths directly: base first, then 00/01/... overlays replace earlier files.";
 
     public event PropertyChangedEventHandler? PropertyChanged;
 
@@ -169,8 +184,8 @@ public sealed class ExtractionPackOption : INotifyPropertyChanged
         LogicalPackViewModel pack,
         bool isSelected)
     {
-        SeriesName = pack.SeriesName;
-        Name = pack.Name;
+        SeriesName = pack.Key;
+        Name = pack.ListLabel;
         LayerSummary = pack.LayerSummary;
         FileCount = pack.FileCount;
         SourceArchivePaths = pack.Members

@@ -121,7 +121,7 @@
           <CheckBox x:Name="LoopCheckBox"
                     Grid.Column="9"
                     VerticalAlignment="Center"
-                    IsChecked="True"
+                    IsChecked="False"
                     Content="Loop" />
         </Grid>
       </Grid>

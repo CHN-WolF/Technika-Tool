@@ -29,7 +29,8 @@ internal interface IInspectionWorkflowService
         string outputDirectory,
         bool buildMergedView,
         IProgress<ExtractionProgress> progress,
-        CancellationToken cancellationToken);
+        CancellationToken cancellationToken,
+        IReadOnlyCollection<string>? includedDecodedPaths = null);
 
     ValueTask<ToolResult<PakKeyCoverage>> RecoverPakKeyAsync(
         IReadOnlyList<string> archives,
@@ -72,12 +73,18 @@ internal sealed class InspectionWorkflowService : IInspectionWorkflowService
         string outputDirectory,
         bool buildMergedView,
         IProgress<ExtractionProgress> progress,
-        CancellationToken cancellationToken) =>
+        CancellationToken cancellationToken,
+        IReadOnlyCollection<string>? includedDecodedPaths = null) =>
         new ArchiveExtractor(Decoders(evidence)).ExtractAsync(
             archives,
             new ExtractionOptions(outputDirectory, buildMergedView)
             {
-                InputPaths = archives.Select(static archive => archive.ArchivePath).ToArray()
+                InputPaths = archives.Select(static archive => archive.ArchivePath).ToArray(),
+                IncludedDecodedPaths = includedDecodedPaths is null
+                    ? null
+                    : new HashSet<string>(
+                        includedDecodedPaths.Where(static path => !string.IsNullOrWhiteSpace(path)),
+                        StringComparer.OrdinalIgnoreCase)
             },
             progress,
             cancellationToken);

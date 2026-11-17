@@ -15,6 +15,7 @@ public sealed class AtomicOutputFile : IDisposable, IAsyncDisposable
     private readonly SafeFileHandle? _destinationDirectory;
     private readonly OpenedFileProof? _openedDirectoryProof;
     private readonly Action<SafeFileHandle>? _deleteOpenedPart;
+    private readonly bool _overwriteExisting;
     private Stream? _stream;
     private OutputState _state;
     private bool _cleanupAttempted;
@@ -27,7 +28,8 @@ public sealed class AtomicOutputFile : IDisposable, IAsyncDisposable
         OpenedFileProof? openedPartProof = null,
         SafeFileHandle? destinationDirectory = null,
         OpenedFileProof? openedDirectoryProof = null,
-        Action<SafeFileHandle>? deleteOpenedPart = null)
+        Action<SafeFileHandle>? deleteOpenedPart = null,
+        bool overwriteExisting = false)
     {
         FinalPath = finalPath;
         PartPath = partPath;
@@ -37,6 +39,7 @@ public sealed class AtomicOutputFile : IDisposable, IAsyncDisposable
         _destinationDirectory = destinationDirectory;
         _openedDirectoryProof = openedDirectoryProof;
         _deleteOpenedPart = deleteOpenedPart;
+        _overwriteExisting = overwriteExisting;
     }
 
     private enum OutputState
@@ -74,6 +77,15 @@ public sealed class AtomicOutputFile : IDisposable, IAsyncDisposable
     public static ValueTask<AtomicOutputFile> CreateAsync(
         string finalPath,
         CancellationToken cancellationToken = default) =>
+        CreateAsync(
+            finalPath,
+            overwriteExisting: false,
+            cancellationToken);
+
+    public static ValueTask<AtomicOutputFile> CreateAsync(
+        string finalPath,
+        bool overwriteExisting,
+        CancellationToken cancellationToken = default) =>
         CreateAsyncCore(
             finalPath,
             static partPath => new FileStream(
@@ -83,7 +95,8 @@ public sealed class AtomicOutputFile : IDisposable, IAsyncDisposable
                 FileShare.Read,
                 bufferSize: 64 * 1024,
                 FileOptions.Asynchronous | FileOptions.SequentialScan),
-            cancellationToken);
+            cancellationToken,
+            overwriteExisting: overwriteExisting);
 
     internal static ValueTask<AtomicOutputFile> CreateAsync(
         string finalPath,
@@ -134,7 +147,8 @@ public sealed class AtomicOutputFile : IDisposable, IAsyncDisposable
         Func<string, Stream> streamFactory,
         CancellationToken cancellationToken,
         Action<string>? beforePartCreate = null,
-        AtomicOutputHandleVerifier? handleVerifier = null)
+        AtomicOutputHandleVerifier? handleVerifier = null,
+        bool overwriteExisting = false)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(finalPath);
         cancellationToken.ThrowIfCancellationRequested();
@@ -170,7 +184,8 @@ public sealed class AtomicOutputFile : IDisposable, IAsyncDisposable
                         partPath,
                         stream,
                         handleVerifier,
-                        proof));
+                        proof,
+                        overwriteExisting: overwriteExisting));
             }
             catch (IOException) when (stream is null && File.Exists(partPath))
             {
@@ -237,13 +252,14 @@ public sealed class AtomicOutputFile : IDisposable, IAsyncDisposable
                 await CloseStreamAsync().ConfigureAwait(false);
                 cancellationToken.ThrowIfCancellationRequested();
 
-                if (File.Exists(FinalPath) || Directory.Exists(FinalPath))
+                if (Directory.Exists(FinalPath)
+                    || (!_overwriteExisting && File.Exists(FinalPath)))
                 {
                     throw new IOException(
                         $"The output already exists: {FinalPath}");
                 }
 
-                File.Move(PartPath, FinalPath, overwrite: false);
+                File.Move(PartPath, FinalPath, overwrite: _overwriteExisting);
                 _state = OutputState.Published;
             }
             catch

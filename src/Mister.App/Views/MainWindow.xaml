@@ -7,7 +7,7 @@
         Width="1440"
         Height="900"
         MinWidth="1080"
-        MinHeight="700"
+        MinHeight="640"
         WindowStartupLocation="CenterScreen"
         UseLayoutRounding="True"
         SnapsToDevicePixels="True"
@@ -16,25 +16,21 @@
         Drop="OnDrop"
         Closing="OnClosing"
         Closed="OnClosed">
-  <ScrollViewer HorizontalScrollBarVisibility="Disabled"
-                VerticalScrollBarVisibility="Auto"
-                PanningMode="VerticalOnly"
-                CanContentScroll="False">
-  <Grid Margin="28,22,28,20">
+  <Grid Margin="28,18,28,14">
     <Grid.RowDefinitions>
       <RowDefinition Height="Auto" />
-      <RowDefinition Height="18" />
+      <RowDefinition Height="12" />
       <RowDefinition Height="*" />
-      <RowDefinition Height="14" />
+      <RowDefinition Height="10" />
       <RowDefinition Height="Auto" />
     </Grid.RowDefinitions>
 
     <Grid Grid.Row="0">
       <Grid.RowDefinitions>
         <RowDefinition Height="Auto" />
-        <RowDefinition Height="14" />
-        <RowDefinition Height="Auto" />
         <RowDefinition Height="10" />
+        <RowDefinition Height="Auto" />
+        <RowDefinition Height="8" />
         <RowDefinition Height="Auto" />
       </Grid.RowDefinitions>
 
@@ -48,10 +44,11 @@
                      Foreground="{StaticResource TextMutedBrush}"
                      Text="Technika Tools" />
           <TextBlock Style="{StaticResource DisplayTitle}"
-                     Margin="0,4,0,0"
+                     Margin="0,2,0,0"
+                     FontSize="28"
                      Text="Pack Workbench" />
-          <TextBlock Margin="1,7,0,0"
-                     FontSize="15"
+          <TextBlock Margin="1,4,0,0"
+                     FontSize="13"
                      Foreground="{StaticResource TextSecondaryBrush}"
                      Text="Browse one logical pack at a time, then inspect its assets at a comfortable size." />
         </StackPanel>
@@ -69,8 +66,9 @@
         </Border>
       </Grid>
 
-      <Expander Grid.Row="2"
-                IsExpanded="False"
+      <Expander x:Name="SetupExpander"
+                Grid.Row="2"
+                IsExpanded="True"
                 Header="Setup &amp; evidence">
         <Border Margin="0,12,0,0"
                 Style="{StaticResource SurfaceBorder}"
@@ -181,19 +179,15 @@
       </Border>
     </Grid>
 
-    <Grid x:Name="WorkspaceGrid"
-          Grid.Row="2"
-          MinHeight="500">
+    <Grid x:Name="WorkspaceGrid" Grid.Row="2">
       <Grid.ColumnDefinitions>
         <ColumnDefinition x:Name="LibraryColumn" Width="350" MinWidth="0" />
         <ColumnDefinition x:Name="LibraryGapColumn" Width="18" />
-        <ColumnDefinition Width="*" MinWidth="560" />
+        <ColumnDefinition Width="*" MinWidth="420" />
       </Grid.ColumnDefinitions>
 
       <Border x:Name="LibraryPanel"
               Grid.Column="0"
-              MaxHeight="620"
-              VerticalAlignment="Top"
               Style="{StaticResource SurfaceBorder}"
               Padding="20">
         <Grid>
@@ -230,16 +224,21 @@
                        FontSize="12"
                        FontWeight="SemiBold"
                        Foreground="{StaticResource TextSecondaryBrush}"
-                       Text="Logical pack" />
+                       Text="{Binding PackPickerLabel, Mode=OneWay}" />
             <ComboBox ItemsSource="{Binding PackGroups}"
                       SelectedItem="{Binding SelectedPack}"
-                      AutomationProperties.Name="Logical pack collection">
+                      AutomationProperties.Name="Pack collection">
               <ComboBox.ItemTemplate>
                 <DataTemplate>
-                  <TextBlock Text="{Binding Name, Mode=OneWay}" />
+                  <TextBlock Text="{Binding ListLabel, Mode=OneWay}"
+                             ToolTip="{Binding SourcePathLabel, Mode=OneWay}" />
                 </DataTemplate>
               </ComboBox.ItemTemplate>
             </ComboBox>
+            <CheckBox Margin="0,8,0,0"
+                      Content="Merge layers"
+                      IsChecked="{Binding MergePackLayers}"
+                      ToolTip="Combine a base pak and its numbered updates, such as pattern.pak and pattern00.pak, into one file list. Leave this off to see each pak separately." />
             <TextBlock Margin="1,7,0,0"
                        FontSize="12"
                        TextWrapping="Wrap"
@@ -268,7 +267,7 @@
                        TextAlignment="Center"
                        TextWrapping="Wrap"
                        Foreground="{StaticResource TextMutedBrush}"
-                       Text="Open a client or add a PAK folder to begin. Numbered update archives are grouped automatically.">
+                       Text="Open a client or add a PAK folder to begin. Each pak is listed on its own until Merge layers is turned on.">
               <TextBlock.Style>
                 <Style TargetType="{x:Type TextBlock}">
                   <Setter Property="Visibility" Value="Collapsed" />
@@ -280,7 +279,8 @@
                 </Style>
               </TextBlock.Style>
             </TextBlock>
-            <views:ArchiveInspectorView x:Name="ArchiveInspector">
+            <views:ArchiveInspectorView x:Name="ArchiveInspector"
+                                         ExtractRequested="OnExtractSong">
               <views:ArchiveInspectorView.Style>
                 <Style TargetType="{x:Type views:ArchiveInspectorView}">
                   <Setter Property="Visibility" Value="Visible" />
@@ -306,9 +306,18 @@
             <RowDefinition Height="Auto" />
           </Grid.RowDefinitions>
 
-          <Border Padding="24,20"
-                  BorderBrush="{StaticResource BorderBrush}"
+          <Border BorderBrush="{StaticResource BorderBrush}"
                   BorderThickness="0,0,0,1">
+            <Border.Style>
+              <Style TargetType="{x:Type Border}">
+                <Setter Property="Padding" Value="24,20" />
+                <Style.Triggers>
+                  <DataTrigger Binding="{Binding HasMediaPlayback}" Value="True">
+                    <Setter Property="Padding" Value="16,10" />
+                  </DataTrigger>
+                </Style.Triggers>
+              </Style>
+            </Border.Style>
             <Grid>
               <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" />
@@ -361,10 +370,20 @@
             </Grid>
           </Border>
 
-          <Grid Grid.Row="1" Margin="20">
+          <Grid x:Name="PreviewStageHost" Grid.Row="1">
+            <Grid.Style>
+              <Style TargetType="{x:Type Grid}">
+                <Setter Property="Margin" Value="20" />
+                <Style.Triggers>
+                  <DataTrigger Binding="{Binding HasMediaPlayback}" Value="True">
+                    <Setter Property="Margin" Value="0" />
+                  </DataTrigger>
+                </Style.Triggers>
+              </Style>
+            </Grid.Style>
             <Border x:Name="PreviewStageBorder"
-                    MinHeight="480"
                     HorizontalAlignment="Stretch"
+                    VerticalAlignment="Stretch"
                     Background="#FAFAFA"
                     BorderBrush="{StaticResource BorderBrush}"
                     BorderThickness="1"
@@ -402,12 +421,12 @@
                              HorizontalAlignment="Center"
                              FontFamily="Georgia"
                              FontSize="19"
-                             Text="Choose a file to preview" />
+                             Text="{Binding PreviewEmptyTitle, Mode=OneWay}" />
                   <TextBlock Margin="0,7,0,0"
                              TextAlignment="Center"
                              TextWrapping="Wrap"
                              Foreground="{StaticResource TextMutedBrush}"
-                             Text="Preview images, text, audio, video, VCE animation, and unknown binaries safely here." />
+                             Text="{Binding PreviewEmptyMessage, Mode=OneWay}" />
                 </StackPanel>
 
                 <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
@@ -591,6 +610,15 @@
                   Padding="24,16"
                   BorderBrush="{StaticResource BorderBrush}"
                   BorderThickness="0,1,0,0">
+            <Border.Style>
+              <Style TargetType="{x:Type Border}">
+                <Style.Triggers>
+                  <DataTrigger Binding="{Binding HasMediaPlayback}" Value="True">
+                    <Setter Property="Visibility" Value="Collapsed" />
+                  </DataTrigger>
+                </Style.Triggers>
+              </Style>
+            </Border.Style>
             <Grid>
               <Grid.RowDefinitions>
                 <RowDefinition Height="Auto" />
@@ -692,44 +720,57 @@
     </Grid>
 
     <Border Grid.Row="4"
-            Background="Transparent"
+            Background="{StaticResource SurfaceBrush}"
             BorderBrush="{StaticResource BorderBrush}"
-            BorderThickness="0,1,0,0"
-            Padding="2,12,2,0">
+            BorderThickness="1"
+            CornerRadius="12"
+            Padding="14,10">
       <Grid>
         <Grid.ColumnDefinitions>
           <ColumnDefinition Width="*" />
+          <ColumnDefinition Width="12" />
           <ColumnDefinition Width="Auto" />
         </Grid.ColumnDefinitions>
+        <Grid.RowDefinitions>
+          <RowDefinition Height="Auto" />
+          <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
         <StackPanel>
           <TextBlock FontSize="12"
                      Foreground="{StaticResource TextMutedBrush}"
                      Text="Drop a client, PAKs, a Pack folder, pakkeys, or a .ttcapture anywhere." />
-          <TextBlock Margin="0,3,0,0"
+          <TextBlock Margin="0,4,0,0"
                      FontFamily="Cascadia Mono, Consolas"
-                     FontSize="11"
-                     Foreground="{StaticResource TextSecondaryBrush}">
-            <Run Text="{Binding Operation.ArchiveName, Mode=OneWay}" />
-            <Run Text=" · entry " />
-            <Run Text="{Binding Operation.EntryOrdinal, Mode=OneWay}" />
-            <Run Text="/" />
-            <Run Text="{Binding Operation.EntryCount, Mode=OneWay}" />
-            <Run Text=" · bytes " />
-            <Run Text="{Binding Operation.CompletedDecodedBytes, Mode=OneWay}" />
-            <Run Text="/" />
-            <Run Text="{Binding Operation.TotalDecodedBytes, Mode=OneWay}" />
-            <Run Text=" · failures " />
-            <Run Text="{Binding Operation.FailureCount, Mode=OneWay}" />
-            <Run Text=" · " />
-            <Run Text="{Binding Operation.Elapsed, Mode=OneWay}" />
-          </TextBlock>
+                     FontSize="12"
+                     Foreground="{StaticResource TextSecondaryBrush}"
+                     TextTrimming="CharacterEllipsis"
+                     Text="{Binding Operation.StatusLine, Mode=OneWay}" />
         </StackPanel>
-        <Button Grid.Column="1"
+        <Button Grid.Column="2"
+                VerticalAlignment="Center"
                 Style="{StaticResource QuietButton}"
                 Command="{Binding CancelOperationCommand}"
                 Content="Cancel operation" />
+        <ProgressBar Grid.Row="1"
+                     Grid.ColumnSpan="3"
+                     Margin="0,8,0,0"
+                     Height="4"
+                     Minimum="0"
+                     Maximum="{Binding Operation.TotalDecodedBytes, Mode=OneWay}"
+                     Value="{Binding Operation.CompletedDecodedBytes, Mode=OneWay}"
+                     Foreground="{StaticResource PrimaryBrush}">
+          <ProgressBar.Style>
+            <Style TargetType="{x:Type ProgressBar}">
+              <Setter Property="Visibility" Value="Collapsed" />
+              <Style.Triggers>
+                <DataTrigger Binding="{Binding Operation.IsRunning}" Value="True">
+                  <Setter Property="Visibility" Value="Visible" />
+                </DataTrigger>
+              </Style.Triggers>
+            </Style>
+          </ProgressBar.Style>
+        </ProgressBar>
       </Grid>
     </Border>
   </Grid>
-  </ScrollViewer>
 </Window>

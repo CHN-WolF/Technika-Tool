@@ -14,10 +14,14 @@ public partial class MainWindow : Window
 {
     private bool shutdownStarted;
     private bool shutdownComplete;
+    private bool? setupExpandedBeforeVideo;
+
     public MainWindow()
     {
         InitializeComponent();
+        SetupExpander.IsExpanded = true;
         DataContext = new MainWindowViewModel();
+        ViewModel.PropertyChanged += OnViewModelPropertyChanged;
     }
 
     private MainWindowViewModel ViewModel => (MainWindowViewModel)DataContext;
@@ -87,6 +91,30 @@ public partial class MainWindow : Window
         }
     }
 
+    private async void OnExtractSong(object sender, SongExtractRequest request)
+    {
+        if (!ViewModel.CanExtract || ViewModel.SelectedPack is null || request.Paths.Count == 0)
+        {
+            return;
+        }
+
+        var dialog = new ExtractionDialog(
+            [ViewModel.SelectedPack],
+            ViewModel.SelectedPack,
+            request.Description)
+        {
+            Owner = this
+        };
+        if (dialog.ShowDialog() == true)
+        {
+            await ViewModel.ExtractAsync(
+                dialog.OutputDirectory,
+                dialog.BuildMergedView,
+                dialog.SelectedPackSeries,
+                request.Paths);
+        }
+    }
+
     private async void OnRecoverPakKey(object sender, RoutedEventArgs e)
     {
         await ViewModel.RecoverPakKeyCommand.ExecuteAsync();
@@ -99,6 +127,27 @@ public partial class MainWindow : Window
             && dialog.ExportDirectory is not null)
         {
             await ViewModel.ExportRecoveredPakKeyAsync(dialog.ExportDirectory);
+        }
+    }
+
+    private void OnViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName is not (null or nameof(MainWindowViewModel.HasMediaPlayback)))
+        {
+            return;
+        }
+
+        if (ViewModel.HasMediaPlayback)
+        {
+            setupExpandedBeforeVideo ??= SetupExpander.IsExpanded;
+            SetupExpander.IsExpanded = false;
+            return;
+        }
+
+        if (setupExpandedBeforeVideo is bool expanded)
+        {
+            SetupExpander.IsExpanded = expanded;
+            setupExpandedBeforeVideo = null;
         }
     }
 

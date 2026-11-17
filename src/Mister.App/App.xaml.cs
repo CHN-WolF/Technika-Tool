@@ -8,7 +8,7 @@ namespace Mister.App;
 
 public partial class App : Application
 {
-    private const double MouseWheelStep = 24d;
+    private const int MouseWheelRows = 3;
 
     static App()
     {
@@ -52,7 +52,7 @@ public partial class App : Application
             horizontal);
         if (!ReferenceEquals(current, target)) return;
 
-        double movement = WheelMovement(e.Delta);
+        double movement = WheelMovement(current, e.Delta);
         if (horizontal)
         {
             current.ScrollToHorizontalOffset(
@@ -73,8 +73,95 @@ public partial class App : Application
         e.Handled = true;
     }
 
-    internal static double WheelMovement(int delta) =>
-        Math.Clamp(delta / 120d, -1d, 1d) * MouseWheelStep;
+    internal static double WheelMovement(ScrollViewer viewer, int delta)
+    {
+        double notches = Math.Clamp(delta / 120d, -1d, 1d);
+        return notches * MouseWheelRows * RowStep(viewer);
+    }
+
+    private static double RowStep(ScrollViewer viewer)
+    {
+        ItemsControl? items = FindItemsControl(viewer);
+        FrameworkElement? row = FindRow(viewer);
+        if (row is not null && ScrollsByPixel(viewer, items, row))
+        {
+            return row.ActualHeight + row.Margin.Top + row.Margin.Bottom;
+        }
+
+        if (row is not null)
+        {
+            return 1d;
+        }
+
+        double font = viewer.FontSize > 1 ? viewer.FontSize : 16d;
+        return font * 1.5;
+    }
+
+    private static bool ScrollsByPixel(
+        ScrollViewer viewer,
+        ItemsControl? items,
+        FrameworkElement row)
+    {
+        if (items is not null
+            && VirtualizingPanel.GetScrollUnit(items) == ScrollUnit.Pixel)
+        {
+            return true;
+        }
+
+        return items is { Items.Count: > 1 }
+            && viewer.ExtentHeight > items.Items.Count + row.ActualHeight;
+    }
+
+    private static ItemsControl? FindItemsControl(DependencyObject? source)
+    {
+        for (DependencyObject? current = source;
+             current is not null;
+             current = GetParent(current))
+        {
+            if (current is ItemsControl items) return items;
+        }
+
+        return null;
+    }
+
+    private static FrameworkElement? FindRow(ScrollViewer viewer)
+    {
+        if (FindItemPanel(viewer) is not Panel panel) return null;
+        foreach (UIElement child in panel.Children)
+        {
+            if (child is FrameworkElement element && element.ActualHeight > 1)
+            {
+                return element;
+            }
+        }
+
+        return null;
+    }
+
+    private static Panel? FindItemPanel(DependencyObject root)
+    {
+        int count = VisualTreeHelper.GetChildrenCount(root);
+        for (int index = 0; index < count; index++)
+        {
+            DependencyObject child = VisualTreeHelper.GetChild(root, index);
+            if (child is Panel panel && IsItemPanel(panel)) return panel;
+            Panel? nested = FindItemPanel(child);
+            if (nested is not null) return nested;
+        }
+
+        return null;
+    }
+
+    private static bool IsItemPanel(Panel panel)
+    {
+        if (panel is not (VirtualizingStackPanel or StackPanel)) return false;
+        foreach (UIElement child in panel.Children)
+        {
+            if (child is ListBoxItem or ComboBoxItem or TreeViewItem) return true;
+        }
+
+        return false;
+    }
 
     private static ScrollViewer? FindScrollableViewer(
         DependencyObject? source,

@@ -29,9 +29,9 @@ public sealed class ArchiveTreeNodeViewModel
     public string FileName => Path.GetFileName(DecodedPath);
     public string DirectoryName => Path.GetDirectoryName(DecodedPath) ?? string.Empty;
     public string Extension => Path.GetExtension(DecodedPath);
-    public string SizeLabel => FormatSize(Entry.DecodedSize);
+    public string SizeLabel => FormatByteSize(Entry.DecodedSize);
 
-    private static string FormatSize(long bytes) => bytes switch
+    internal static string FormatByteSize(long bytes) => bytes switch
     {
         < 0 => "Unknown size",
         < 1024 => $"{bytes} B",
