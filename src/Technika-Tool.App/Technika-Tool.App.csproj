@@ -1,0 +1,35 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <AssemblyName>Technika Tool</AssemblyName>
+    <AssemblyTitle>Technika Tool</AssemblyTitle>
+    <Product>Technika Tool</Product>
+    <Company>Technika Tool</Company>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Technika-Tool.Core\Technika-Tool.Core.csproj" />
+    <ProjectReference Include="..\Technika-Tool.Windows\Technika-Tool.Windows.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="FFmpeg.AutoGen" />
+  </ItemGroup>
+  <ItemGroup>
+    <Content Include="Native\ffmpeg\*.dll">
+      <Link>%(Filename)%(Extension)</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </Content>
+    <Content Include="Native\ffmpeg\LICENSE.txt">
+      <Link>ffmpeg-LICENSE.txt</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </Content>
+  </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="Technika-Tool.App.Tests" />
+  </ItemGroup>
+</Project>

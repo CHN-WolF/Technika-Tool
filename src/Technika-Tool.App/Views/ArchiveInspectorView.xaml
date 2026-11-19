@@ -1,0 +1,249 @@
+<UserControl x:Class="TechnikaTool.App.Views.ArchiveInspectorView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="clr-namespace:TechnikaTool.App.ViewModels"
+             DataContext="{Binding DataContext.Inspector, RelativeSource={RelativeSource AncestorType=Window}}">
+  <Grid>
+    <Grid.RowDefinitions>
+      <RowDefinition Height="Auto" />
+      <RowDefinition Height="10" />
+      <RowDefinition Height="*" />
+    </Grid.RowDefinitions>
+
+    <StackPanel>
+      <Grid>
+        <Grid.ColumnDefinitions>
+          <ColumnDefinition Width="*" />
+          <ColumnDefinition Width="8" />
+          <ColumnDefinition Width="96" />
+        </Grid.ColumnDefinitions>
+        <Grid>
+          <TextBox Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}"
+                   ToolTip="Search song folders, or files inside an open song"
+                   AutomationProperties.Name="Search decoded files" />
+          <TextBlock Margin="12,0,0,0"
+                     VerticalAlignment="Center"
+                     IsHitTestVisible="False"
+                     Foreground="{StaticResource TextMutedBrush}"
+                     Text="{Binding SearchPlaceholder}">
+            <TextBlock.Style>
+              <Style TargetType="{x:Type TextBlock}">
+                <Setter Property="Visibility" Value="Collapsed" />
+                <Style.Triggers>
+                  <DataTrigger Binding="{Binding SearchText}" Value="">
+                    <Setter Property="Visibility" Value="Visible" />
+                  </DataTrigger>
+                </Style.Triggers>
+              </Style>
+            </TextBlock.Style>
+          </TextBlock>
+        </Grid>
+        <Grid Grid.Column="2">
+          <TextBox Text="{Binding ExtensionFilter, UpdateSourceTrigger=PropertyChanged}"
+                   ToolTip="Filter by extension, such as .ogg or .pt"
+                   AutomationProperties.Name="Filter file extension" />
+          <TextBlock Margin="12,0,0,0"
+                     VerticalAlignment="Center"
+                     IsHitTestVisible="False"
+                     Foreground="{StaticResource TextMutedBrush}"
+                     Text=".png">
+            <TextBlock.Style>
+              <Style TargetType="{x:Type TextBlock}">
+                <Setter Property="Visibility" Value="Collapsed" />
+                <Style.Triggers>
+                  <DataTrigger Binding="{Binding ExtensionFilter}" Value="">
+                    <Setter Property="Visibility" Value="Visible" />
+                  </DataTrigger>
+                </Style.Triggers>
+              </Style>
+            </TextBlock.Style>
+          </TextBlock>
+        </Grid>
+      </Grid>
+
+      <StackPanel Margin="0,8,0,0">
+        <StackPanel.Style>
+          <Style TargetType="{x:Type StackPanel}">
+            <Setter Property="Visibility" Value="Collapsed" />
+            <Style.Triggers>
+              <DataTrigger Binding="{Binding IsSongBrowser}" Value="True">
+                <Setter Property="Visibility" Value="Visible" />
+              </DataTrigger>
+            </Style.Triggers>
+          </Style>
+        </StackPanel.Style>
+        <WrapPanel>
+          <Button Margin="0,0,8,8"
+                  Padding="10,4"
+                  MinHeight="32"
+                  Click="OnBack"
+                  Content="Back"
+                  ToolTip="Return to the song list">
+            <Button.Style>
+              <Style TargetType="{x:Type Button}" BasedOn="{StaticResource QuietButton}">
+                <Setter Property="Visibility" Value="Collapsed" />
+                <Style.Triggers>
+                  <DataTrigger Binding="{Binding IsInsideSong}" Value="True">
+                    <Setter Property="Visibility" Value="Visible" />
+                  </DataTrigger>
+                </Style.Triggers>
+              </Style>
+            </Button.Style>
+          </Button>
+          <TextBlock Margin="0,6,8,8"
+                     VerticalAlignment="Center"
+                     FontWeight="SemiBold"
+                     Text="{Binding CurrentFolderTitle}">
+            <TextBlock.Style>
+              <Style TargetType="{x:Type TextBlock}">
+                <Setter Property="Visibility" Value="Collapsed" />
+                <Style.Triggers>
+                  <DataTrigger Binding="{Binding IsInsideSong}" Value="True">
+                    <Setter Property="Visibility" Value="Visible" />
+                  </DataTrigger>
+                </Style.Triggers>
+              </Style>
+            </TextBlock.Style>
+          </TextBlock>
+          <Button Margin="0,0,8,8"
+                  Padding="10,4"
+                  MinHeight="32"
+                  Click="OnOpenFolder"
+                  Content="Open"
+                  IsEnabled="{Binding CanOpenFolder}"
+                  ToolTip="Open the selected song">
+            <Button.Style>
+              <Style TargetType="{x:Type Button}" BasedOn="{StaticResource QuietButton}">
+                <Setter Property="Visibility" Value="Collapsed" />
+                <Style.Triggers>
+                  <DataTrigger Binding="{Binding IsSongList}" Value="True">
+                    <Setter Property="Visibility" Value="Visible" />
+                  </DataTrigger>
+                </Style.Triggers>
+              </Style>
+            </Button.Style>
+          </Button>
+          <Button Margin="0,0,8,8"
+                  Padding="10,4"
+                  MinHeight="32"
+                  Click="OnExtractFolders"
+                  Content="Extract folder"
+                  IsEnabled="{Binding CanExtractFolder}"
+                  ToolTip="Extract every file in the selected song folders">
+            <Button.Style>
+              <Style TargetType="{x:Type Button}" BasedOn="{StaticResource PrimaryButton}">
+                <Setter Property="Visibility" Value="Collapsed" />
+                <Style.Triggers>
+                  <DataTrigger Binding="{Binding IsSongList}" Value="True">
+                    <Setter Property="Visibility" Value="Visible" />
+                  </DataTrigger>
+                </Style.Triggers>
+              </Style>
+            </Button.Style>
+          </Button>
+          <Button Margin="0,0,8,8"
+                  Padding="10,4"
+                  MinHeight="32"
+                  Click="OnExtractFiles"
+                  Content="Extract selected"
+                  IsEnabled="{Binding CanExtractFiles}"
+                  ToolTip="Extract the selected audio and chart files">
+            <Button.Style>
+              <Style TargetType="{x:Type Button}" BasedOn="{StaticResource PrimaryButton}">
+                <Setter Property="Visibility" Value="Collapsed" />
+                <Style.Triggers>
+                  <DataTrigger Binding="{Binding IsInsideSong}" Value="True">
+                    <Setter Property="Visibility" Value="Visible" />
+                  </DataTrigger>
+                </Style.Triggers>
+              </Style>
+            </Button.Style>
+          </Button>
+        </WrapPanel>
+        <TextBlock FontSize="11"
+                   TextWrapping="Wrap"
+                   Foreground="{StaticResource TextMutedBrush}"
+                   Text="{Binding BrowserHint}" />
+      </StackPanel>
+    </StackPanel>
+
+    <Grid Grid.Row="2">
+      <TextBlock HorizontalAlignment="Center"
+                 VerticalAlignment="Center"
+                 MaxWidth="240"
+                 TextAlignment="Center"
+                 TextWrapping="Wrap"
+                 Foreground="{StaticResource TextMutedBrush}"
+                 Text="{Binding EmptyMessage}">
+        <TextBlock.Style>
+          <Style TargetType="{x:Type TextBlock}">
+            <Setter Property="Visibility" Value="Collapsed" />
+            <Style.Triggers>
+              <DataTrigger Binding="{Binding VisibleRows.Count}" Value="0">
+                <Setter Property="Visibility" Value="Visible" />
+              </DataTrigger>
+            </Style.Triggers>
+          </Style>
+        </TextBlock.Style>
+      </TextBlock>
+
+      <ListBox x:Name="FileList"
+               ItemsSource="{Binding VisibleRows}"
+               SelectedItem="{Binding SelectedRow}"
+               SelectionMode="Extended"
+               IsTextSearchEnabled="False"
+               MouseDoubleClick="OnFileListDoubleClick"
+               ScrollViewer.CanContentScroll="True"
+               ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+               ScrollViewer.VerticalScrollBarVisibility="Auto"
+               ScrollViewer.PanningMode="VerticalOnly"
+               VirtualizingStackPanel.IsVirtualizing="True"
+               VirtualizingStackPanel.VirtualizationMode="Recycling"
+               VirtualizingPanel.ScrollUnit="Pixel"
+               AutomationProperties.Name="Files in selected logical pack">
+        <ListBox.ItemTemplate>
+          <DataTemplate DataType="{x:Type vm:ArchiveBrowserRowViewModel}">
+            <Grid ToolTip="{Binding ToolTipText}">
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+              </Grid.ColumnDefinitions>
+              <StackPanel>
+                <TextBlock FontWeight="SemiBold"
+                           Text="{Binding Title}" />
+                <TextBlock Margin="0,3,0,0"
+                           FontSize="11"
+                           Foreground="{StaticResource TextMutedBrush}"
+                           Text="{Binding Subtitle}" />
+                <TextBlock Margin="0,4,0,0"
+                           FontFamily="Cascadia Mono, Consolas"
+                           FontSize="10"
+                           Foreground="{StaticResource PrimaryBrush}"
+                           Text="{Binding DetailLine}" />
+              </StackPanel>
+              <StackPanel Grid.Column="1"
+                          Margin="10,0,0,0"
+                          HorizontalAlignment="Right">
+                <Border HorizontalAlignment="Right"
+                        Background="{StaticResource SurfaceRaisedBrush}"
+                        CornerRadius="4"
+                        Padding="6,2">
+                  <TextBlock FontFamily="Cascadia Mono, Consolas"
+                             FontSize="9"
+                             Foreground="{StaticResource TextSecondaryBrush}"
+                             Text="{Binding Badge}" />
+                </Border>
+                <TextBlock Margin="0,6,0,0"
+                           HorizontalAlignment="Right"
+                           FontFamily="Cascadia Mono, Consolas"
+                           FontSize="10"
+                           Foreground="{StaticResource TextMutedBrush}"
+                           Text="{Binding Meta}" />
+              </StackPanel>
+            </Grid>
+          </DataTemplate>
+        </ListBox.ItemTemplate>
+      </ListBox>
+    </Grid>
+  </Grid>
+</UserControl>

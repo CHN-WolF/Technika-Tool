@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <ProjectReference Include="..\Technika-Tool.Core\Technika-Tool.Core.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="Technika-Tool.Windows.Tests" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(ExcludeWindowsSandbox)' == 'true'">
+    <Compile Remove="Sandbox\**\*.cs" />
+  </ItemGroup>
+</Project>
